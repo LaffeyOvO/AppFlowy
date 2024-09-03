@@ -6,7 +6,8 @@ import { AFConfigContext } from '@/components/app/app.hooks';
 import { GlobalCommentProvider } from '@/components/global-comment';
 import CollabView from '@/components/publish/CollabView';
 import { OutlineDrawer } from '@/components/publish/outline';
-import React, { Suspense, useCallback, useContext, useEffect, useState } from 'react';
+import { getPlatform } from '@/utils/platform';
+import React, { Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { PublishViewHeader } from '@/components/publish/header';
 import NotFound from '@/components/error/NotFound';
 import { useSearchParams } from 'react-router-dom';
@@ -42,7 +43,9 @@ export function PublishView ({ namespace, publishName }: PublishViewProps) {
     void openPublishView();
   }, [openPublishView]);
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => {
+    return localStorage.getItem('publish_outline_open') === 'true';
+  });
 
   const [search] = useSearchParams();
 
@@ -50,9 +53,15 @@ export function PublishView ({ namespace, publishName }: PublishViewProps) {
   const isTemplateThumb = isTemplate && search.get('thumbnail') === 'true';
 
   useEffect(() => {
+    localStorage.setItem('publish_outline_open', open ? 'true' : 'false');
+  }, [open]);
+
+  useEffect(() => {
     if (!isTemplateThumb) return;
     document.documentElement.setAttribute('thumbnail', 'true');
   }, [isTemplateThumb]);
+
+  const drawerOpened = useMemo(() => open && !getPlatform().isMobile, [open]);
 
   if (notFound && !doc) {
     return <NotFound />;
@@ -73,8 +82,8 @@ export function PublishView ({ namespace, publishName }: PublishViewProps) {
           overflowXHidden
           overflowYHidden={isTemplateThumb}
           style={{
-            transform: open ? `translateX(${drawerWidth}px)` : 'none',
-            width: open ? `calc(100% - ${drawerWidth}px)` : '100%',
+            transform: drawerOpened ? `translateX(${drawerWidth}px)` : 'none',
+            width: drawerOpened ? `calc(100% - ${drawerWidth}px)` : '100%',
             transition: 'width 0.2s ease-in-out, transform 0.2s ease-in-out',
           }}
           className={'appflowy-layout appflowy-scroll-container h-full'}
@@ -83,7 +92,11 @@ export function PublishView ({ namespace, publishName }: PublishViewProps) {
             onOpenDrawer={() => {
               setOpen(true);
             }}
-            openDrawer={open}
+            drawerWidth={drawerWidth}
+            onCloseDrawer={() => {
+              setOpen(false);
+            }}
+            openDrawer={drawerOpened}
           />}
 
           <CollabView doc={doc} />
@@ -93,7 +106,8 @@ export function PublishView ({ namespace, publishName }: PublishViewProps) {
             </Suspense>
           )}
         </AFScroller>
-        {open && <OutlineDrawer width={drawerWidth} open={open} onClose={() => setOpen(false)} />}
+        {drawerOpened &&
+          <OutlineDrawer width={drawerWidth} open={drawerOpened} onClose={() => setOpen(false)} />}
       </div>
     </PublishProvider>
   );
