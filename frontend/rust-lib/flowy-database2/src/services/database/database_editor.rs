@@ -77,7 +77,6 @@ impl DatabaseEditor {
     let database_cancellation = Arc::new(RwLock::new(None));
     // Receive database sync state and send to frontend via the notification
     observe_sync_state(&database_id, &database).await;
-    observe_view_change(&database_id, &database).await;
     // observe_field_change(&database_id, &database).await;
     observe_rows_change(&database_id, &database, &notification_sender).await;
 
@@ -127,6 +126,7 @@ impl DatabaseEditor {
       finalized_rows: Arc::new(Default::default()),
     });
     observe_block_event(&database_id, &this).await;
+    observe_view_change(&database_id, &this).await;
     Ok(this)
   }
 
@@ -547,10 +547,6 @@ impl DatabaseEditor {
       (row, index)
     };
 
-    for view in self.database_views.editors().await {
-      view.v_did_create_row(&row, index).await;
-    }
-
     Ok(())
   }
 
@@ -596,20 +592,9 @@ impl DatabaseEditor {
     } = view_editor.v_will_create_row(params).await?;
 
     let mut database = self.database.write().await;
-    let (index, order_id) = database
+    let _ = database
       .create_row_in_view(&view_editor.view_id, collab_params)
       .await?;
-    let row_detail = database.get_row_detail(&order_id.id).await;
-    drop(database);
-
-    if let Some(row_detail) = row_detail {
-      trace!("created row: {:?} at {}", row_detail, index);
-      for view in self.database_views.editors().await {
-        view.v_did_create_row(&row_detail.row, index).await;
-      }
-      return Ok(Some(row_detail));
-    }
-
     Ok(None)
   }
 
@@ -1521,6 +1506,10 @@ impl DatabaseEditor {
       .ok_or(FlowyError::record_not_found())?;
 
     Ok(type_option.database_id)
+  }
+
+  pub async fn get_row_index(&self, view_id: &str, row_id: &RowId) -> Option<usize> {
+    self.database.read().await.get_row_index(view_id, row_id)
   }
 
   /// TODO(nathan): lazy load database rows
